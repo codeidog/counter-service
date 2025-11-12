@@ -55,11 +55,8 @@ jobs:
         MINOR=$(echo $VERSION_FILE | cut -d. -f2)
         
         # Check if VERSION file changed in this push
-        if git diff HEAD~1 VERSION >/dev/null 2>&1; then
-          echo "VERSION file changed - resetting to .0"
-          PATCH=0
-          BUMP_TYPE="major_or_minor"
-        else
+        if git diff --quiet HEAD~1 VERSION; then
+          # No changes to VERSION file - increment patch
           # Extract patch from latest tag with same major.minor
           if [[ "$LATEST_TAG" == v${MAJOR}.${MINOR}.* ]]; then
             CURRENT_PATCH=$(echo $LATEST_TAG | cut -d. -f3)
@@ -68,6 +65,11 @@ jobs:
             PATCH=0
           fi
           BUMP_TYPE="patch"
+        else
+          # VERSION file changed - reset patch to 0
+          echo "VERSION file changed - resetting to .0"
+          PATCH=0
+          BUMP_TYPE="major_or_minor"
         fi
         
         NEW_VERSION="v${MAJOR}.${MINOR}.${PATCH}"
