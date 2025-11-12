@@ -35,4 +35,5 @@ def post_index():
 if __name__ == "__main__":
     # Get port from environment variable, default to 80 if not set
     port = int(os.getenv("PORT", 80))
+    print("Starting web server")
     app.run(debug=True, port=port, host="0.0.0.0")
