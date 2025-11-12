@@ -10,7 +10,7 @@ post_counter = 0
 
 @app.route("/", methods=["GET"])
 def get_index():
-    global get_counter, post_counter
+    global get_counter
     get_counter += 1
     total_requests = get_counter + post_counter
     return f"""
