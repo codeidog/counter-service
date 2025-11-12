@@ -83,21 +83,20 @@ jobs:
         script: |
           const { execSync } = require('child_process');
           
-          // Get the PR that was merged to create this commit
-          const { data: prs } = await github.rest.repos.listPullRequests({
+          const commitSha = context.sha;
+          console.log(`Looking for PR associated with commit: ${commitSha}`);
+          
+          // Search for PRs that were merged with this commit
+          const { data: pullRequests } = await github.rest.repos.listPullRequestsAssociatedWithCommit({
             owner: context.repo.owner,
             repo: context.repo.repo,
-            state: 'closed',
-            base: 'main',
-            sort: 'updated',
-            direction: 'desc'
+            commit_sha: commitSha,
           });
           
-          // Find the PR that was merged and resulted in this commit
-          const mergedPr = prs.find(pr => 
-            pr.merged_at && 
-            pr.merge_commit_sha === context.sha
-          );
+          console.log(`Found ${pullRequests.length} PRs associated with commit`);
+          
+          // Find the merged PR
+          const mergedPR = pullRequests.find(pr => pr.state === 'closed' && pr.merged_at);
           
           if (!mergedPr) {
             core.setFailed(`Could not find merged PR for commit ${context.sha}`);
