@@ -19,6 +19,9 @@ jobs:
     outputs:
       new-version: ${{ steps.version.outputs.new_tag }}
       previous-version: ${{ steps.version.outputs.tag }}
+      source-image: ${{ steps.image-check.outputs.image_tag }}
+      source-branch: ${{ steps.image-check.outputs.branch_name }}
+      source-pr: ${{ steps.image-check.outputs.pr_number }}
     permissions:
       id-token: write
       contents: write
@@ -70,31 +73,77 @@ jobs:
         echo "🎯 New version: $NEW_VERSION (${BUMP_TYPE})"
         
         echo "tag=$LATEST_TAG" >> $GITHUB_OUTPUT
-        echo "new_tag=$NEW_VERSION" >> $GITHUB_OUTPUT
-        echo "bump_type=$BUMP_TYPE" >> $GITHUB_OUTPUT
+        echo "new-tag=$NEW_VERSION" >> $GITHUB_OUTPUT
+        echo "bump-type=$BUMP_TYPE" >> $GITHUB_OUTPUT
     
     - name: Check if image exists and get manifest
       id: image-check
-      run: |
-        # Check if the image with commit SHA exists and get its manifest
-        if aws ecr describe-images --repository-name $ECR_REPOSITORY --image-ids imageTag=${{ github.sha }} >/dev/null 2>&1; then
-          echo "✅ Image ${{ github.sha }} exists in ECR"
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const { execSync } = require('child_process');
           
-          # Get the image manifest for re-tagging
-          MANIFEST=$(aws ecr batch-get-image --repository-name $ECR_REPOSITORY --image-ids imageTag=${{ github.sha }} --output text --query 'images[0].imageManifest')
-          echo "manifest<<EOF" >> $GITHUB_OUTPUT
-          echo "$MANIFEST" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-        else
-          echo "❌ Image ${{ github.sha }} does not exist in ECR. This should not happen."
-          echo "Available images:"
-          aws ecr describe-images --repository-name $ECR_REPOSITORY --query 'imageDetails[*].imageTags' --output table || echo "No images found"
-          exit 1
-        fi
+          // Get the PR that was merged to create this commit
+          const { data: prs } = await github.rest.repos.listPullRequests({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            state: 'closed',
+            base: 'main',
+            sort: 'updated',
+            direction: 'desc'
+          });
+          
+          // Find the PR that was merged and resulted in this commit
+          const mergedPr = prs.find(pr => 
+            pr.merged_at && 
+            pr.merge_commit_sha === context.sha
+          );
+          
+          if (!mergedPr) {
+            core.setFailed(`Could not find merged PR for commit ${context.sha}`);
+            return;
+          }
+          
+          const prNumber = mergedPr.number;
+          const branchName = mergedPr.head.ref;
+          
+          console.log(`🔗 Found PR number: ${prNumber}`);
+          console.log(`🌿 Branch name: ${branchName}`);
+          
+          // Sanitize branch name for Docker tag
+          const sanitizedBranch = branchName.replace(/[^a-zA-Z0-9._-]/g, '-');
+          const branchTag = `${sanitizedBranch}-${prNumber}`;
+          console.log(`🏷️ Looking for image with tag: ${branchTag}`);
+          
+          // Check if image exists in ECR
+          try {
+            execSync(`aws ecr describe-images --repository-name $ECR_REPOSITORY --image-ids imageTag=${branchTag}`, { stdio: 'pipe' });
+            console.log(`✅ Found image with branch tag: ${branchTag}`);
+            
+            // Get image manifest
+            const manifest = execSync(`aws ecr batch-get-image --repository-name $ECR_REPOSITORY --image-ids imageTag=${branchTag} --output text --query 'images[0].imageManifest'`, { encoding: 'utf8' });
+            
+            // Set outputs
+            core.setOutput('image-tag', branchTag);
+            core.setOutput('branch-name', branchName);
+            core.setOutput('pr-number', prNumber.toString());
+            core.setOutput('manifest', manifest.trim());
+            
+            console.log(`📦 Using image tag: ${branchTag}`);
+            console.log(`🌿 Source branch: ${branchName}`);
+            console.log(`🔗 Source PR: ${prNumber}`);
+            
+          } catch (error) {
+            console.log(`❌ No image found for branch tag: ${branchTag}`);
+            console.log('Available images:');
+            core.setFailed(`Could not find image for branch ${branchName} (tag: ${branchTag})`);
+          }
     
     - name: Re-tag image with version using AWS CLI
       run: |
-        echo "🏷️ Re-tagging image ${{ github.sha }} with version ${{ steps.version.outputs.new_tag }} and latest"
+        echo "🏷️ Re-tagging image ${{ steps.image-check.outputs.image-tag }} with version ${{ steps.version.outputs.new-tag }}"
+        echo "🌿 Source branch: ${{ steps.image-check.outputs.branch-name }}"
+        echo "🔗 Source PR: ${{ steps.image-check.outputs.pr-number }}"
         
         # Put the same manifest with new tags (this creates new tags pointing to the same image)
         aws ecr put-image \
@@ -103,28 +152,32 @@ jobs:
           --image-tag ${{ steps.version.outputs.new_tag }}
         
         echo "✅ Successfully tagged image with:"
-        echo "  - ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ steps.version.outputs.new_tag }}"
+        echo "  - ${{ env.ECR_REPOSITORY }}:${{ steps.version.outputs.new_tag }}"
+        echo "  - Source image: ${{ steps.image-check.outputs.image_tag }}"
     
     - name: Create Git tag
       run: |
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
-        git tag ${{ steps.version.outputs.new_tag }}
-        git push origin ${{ steps.version.outputs.new_tag }}
+        git tag ${{ steps.version.outputs.new-tag }}
+        git push origin ${{ steps.version.outputs.new-tag }}
     
     - name: Create GitHub release
       uses: actions/create-release@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        tag_name: ${{ steps.version.outputs.new_tag }}
-        release_name: Release ${{ steps.version.outputs.new_tag }}
+        tag_name: ${{ steps.version.outputs.new-tag }}
+        release_name: Release ${{ steps.version.outputs.new-tag }}
         body: |
           ## Changes in this Release
           
           **Version**: `${{ steps.version.outputs.new_tag }}` (from VERSION file: `$(cat VERSION)`)
-          **Docker Image**: `${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ steps.version.outputs.new_tag }}`
-          **Commit SHA**: `${{ github.sha }}`
+          **Docker Image**: `${{ env.ECR_REPOSITORY }}:${{ steps.version.outputs.new_tag }}`
+          **Source Image**: `${{ steps.image-check.outputs.image-tag }}`
+          **Source Branch**: `${{ steps.image-check.outputs.branch-name }}`
+          **Source PR**: `${{ steps.image-check.outputs.pr-number }}`
+          **Merge Commit SHA**: `${{ github.sha }}`
           
           ### Version Strategy:
           - **Major.Minor**: Controlled by VERSION file (`$(cat VERSION)`)
@@ -149,4 +202,7 @@ jobs:
     - name: Notify success
       run: |
         echo "✅ Successfully released version ${{ needs.release.outputs.new-version }}"
-        echo "🐳 Image: ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ needs.release.outputs.new-version }}"
+        echo "🐳 Image: ${{ env.ECR_REPOSITORY }}:${{ needs.release.outputs.new-version }}"
+        echo "📦 Source: ${{ needs.release.outputs.source-image }}"
+        echo "🌿 Branch: ${{ needs.release.outputs.source-branch }}"
+        echo "🔗 PR: ${{ needs.release.outputs.source-pr }}"

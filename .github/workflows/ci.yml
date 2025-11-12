@@ -66,11 +66,19 @@ jobs:
     - name: Build Docker image
       run: |
         docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:${{ github.sha }} .
-    
-    - name: Push image to ECR
+
+    - name: Tag & Push image to ECR
+      id: tag-and-push
       run: |
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:${{ github.sha }}
-    
+
+        # Create sanitized branch name for tagging
+        BRANCH_PR_TAG=$(echo "${{ github.head_ref }}-${{github.event.pull_request.number}}" | sed 's/[^a-zA-Z0-9._-]/-/g')
+
+        docker tag $ECR_REGISTRY/$ECR_REPOSITORY:${{ github.sha }} $ECR_REGISTRY/$ECR_REPOSITORY:$BRANCH_PR_TAG
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$BRANCH_PR_TAG
+        echo "branch-pr-tag=$BRANCH_PR_TAG" >> $GITHUB_OUTPUT
+
     - name: Comment PR with image details
       uses: actions/github-script@v7
       if: github.event_name == 'pull_request'
@@ -82,7 +90,10 @@ jobs:
             repo: context.repo.repo,
             body: `🐳 **Docker Image Built Successfully**
             
-            **Image**: \`${{ env.ECR_REPOSITORY }}:${{ github.sha }}\`
+            **Images Built:**
+            - \`${{ env.ECR_REPOSITORY }}:${{ github.sha }}\` (commit SHA)
+            - \`${{ env.ECR_REPOSITORY }}:${{ steps.tag-and-push.outputs.branch-pr-tag }}\` (branch name)
+            
             **Commit**: ${{ github.sha }}
             **Branch**: ${{ github.head_ref }}
             
