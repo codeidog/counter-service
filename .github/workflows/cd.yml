@@ -99,13 +99,13 @@ jobs:
           // Find the merged PR
           const mergedPR = pullRequests.find(pr => pr.state === 'closed' && pr.merged_at);
           
-          if (!mergedPr) {
+          if (!mergedPR) {
             core.setFailed(`Could not find merged PR for commit ${context.sha}`);
             return;
           }
           
-          const prNumber = mergedPr.number;
-          const branchName = mergedPr.head.ref;
+          const prNumber = mergedPR.number;
+          const branchName = mergedPR.head.ref;
           
           console.log(`🔗 Found PR number: ${prNumber}`);
           console.log(`🌿 Branch name: ${branchName}`);
