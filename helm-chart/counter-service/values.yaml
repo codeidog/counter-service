@@ -12,7 +12,7 @@ fullnameOverride: ""
 service:
   type: ClusterIP
   port: 80
-  targetPort: 80
+  targetPort: 8000
 
 ingress:
   enabled: true
@@ -39,9 +39,7 @@ tolerations: []
 affinity: {}
 
 # Environment variables
-env:
-  - name: PORT
-    value: "80"
+env: []
 
 # Health checks
 livenessProbe:
