@@ -1,7 +1,7 @@
 #!flask/bin/python
 import os
 
-from flask import Flask, request, request_started
+from flask import Flask
 
 app = Flask(__name__)
 get_counter = 0
