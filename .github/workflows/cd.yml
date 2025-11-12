@@ -19,6 +19,9 @@ jobs:
     outputs:
       new-version: ${{ steps.version.outputs.new_tag }}
       previous-version: ${{ steps.version.outputs.tag }}
+    permissions:
+      id-token: write
+      contents: write
     
     steps:
     - name: Checkout code
