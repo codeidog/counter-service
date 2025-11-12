@@ -17,11 +17,11 @@ jobs:
   release:
     runs-on: ubuntu-latest
     outputs:
-      new-version: ${{ steps.version.outputs.new_tag }}
+      new-version: ${{ steps.version.outputs.new-tag }}
       previous-version: ${{ steps.version.outputs.tag }}
-      source-image: ${{ steps.image-check.outputs.image_tag }}
-      source-branch: ${{ steps.image-check.outputs.branch_name }}
-      source-pr: ${{ steps.image-check.outputs.pr_number }}
+      source-image: ${{ steps.image-check.outputs.image-tag }}
+      source-branch: ${{ steps.image-check.outputs.branch-name }}
+      source-pr: ${{ steps.image-check.outputs.pr-number }}
     permissions:
       id-token: write
       contents: write
@@ -149,11 +149,11 @@ jobs:
         aws ecr put-image \
           --repository-name $ECR_REPOSITORY \
           --image-manifest '${{ steps.image-check.outputs.manifest }}' \
-          --image-tag ${{ steps.version.outputs.new_tag }}
+          --image-tag ${{ steps.version.outputs.new-tag }}
         
         echo "✅ Successfully tagged image with:"
-        echo "  - ${{ env.ECR_REPOSITORY }}:${{ steps.version.outputs.new_tag }}"
-        echo "  - Source image: ${{ steps.image-check.outputs.image_tag }}"
+        echo "  - ${{ env.ECR_REPOSITORY }}:${{ steps.version.outputs.new-tag }}"
+        echo "  - Source image: ${{ steps.image-check.outputs.image-tag }}"
     
     - name: Create Git tag
       run: |
@@ -172,8 +172,8 @@ jobs:
         body: |
           ## Changes in this Release
           
-          **Version**: `${{ steps.version.outputs.new_tag }}` (from VERSION file: `$(cat VERSION)`)
-          **Docker Image**: `${{ env.ECR_REPOSITORY }}:${{ steps.version.outputs.new_tag }}`
+          **Version**: `${{ steps.version.outputs.new-tag }}` (from VERSION file: `$(cat VERSION)`)
+          **Docker Image**: `${{ env.ECR_REPOSITORY }}:${{ steps.version.outputs.new-tag }}`
           **Source Image**: `${{ steps.image-check.outputs.image-tag }}`
           **Source Branch**: `${{ steps.image-check.outputs.branch-name }}`
           **Source PR**: `${{ steps.image-check.outputs.pr-number }}`
@@ -189,7 +189,7 @@ jobs:
           
           ---
           
-          **Full Changelog**: https://github.com/${{ github.repository }}/compare/${{ steps.version.outputs.tag }}...${{ steps.version.outputs.new_tag }}
+          **Full Changelog**: https://github.com/${{ github.repository }}/compare/${{ steps.version.outputs.tag }}...${{ steps.version.outputs.new-tag }}
         draft: false
         prerelease: false
 
